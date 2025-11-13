@@ -2,87 +2,54 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime, timedelta
 import pytz
+import secrets
 
 db = SQLAlchemy()
 
 def get_indonesia_time():
-    """Get current Indonesia time (WIB)"""
-    jakarta_tz = pytz.timezone('Asia/Jakarta')
-    return datetime.now(jakarta_tz)
+    tz = pytz.timezone('Asia/Jakarta')
+    return datetime.now(tz)
+
+def generate_access_code():
+    return secrets.token_hex(4).upper()
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    wallet_balance = db.Column(db.Float, default=0)
-    role = db.Column(db.String(10), default="user")
-    is_active = db.Column(db.Boolean, default=True)
-    is_deleted = db.Column(db.Boolean, default=False)
-    deleted_at = db.Column(db.DateTime)
+    role = db.Column(db.String(20), default='admin')
     created_at = db.Column(db.DateTime, default=get_indonesia_time)
-    
-    # TAMBAHKAN RELATIONSHIPS
-    payments = db.relationship('Payment', backref='user', lazy=True)
-    accesses = db.relationship('Access', backref='user', lazy=True)
-    
-    # Composite unique constraint
-    __table_args__ = (
-        db.UniqueConstraint('email', 'is_deleted', name='unique_email_not_deleted'),
-    )
-
-class Category(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    description = db.Column(db.String(200))
-    created_at = db.Column(db.DateTime, default=get_indonesia_time)
-    
-    videos = db.relationship('Video', backref='category', lazy=True)
 
 class Video(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
-    embed_url = db.Column(db.String(500), nullable=False)
-    thumbnail_url = db.Column(db.String(500))
-    description = db.Column(db.Text)
-    price = db.Column(db.Float, default=0)
-    is_premium = db.Column(db.Boolean, default=False)
-    category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    url = db.Column(db.String(1024), nullable=False)
+    public_id = db.Column(db.String(512), nullable=True)
     created_at = db.Column(db.DateTime, default=get_indonesia_time)
-    
-    accesses = db.relationship('Access', backref='video', lazy=True)
-    # TAMBAHKAN RELATIONSHIP KE PAYMENT JIKA DIPERLUKAN
-    # payments = db.relationship('Payment', backref='video', lazy=True)
 
-class Payment(db.Model):
+class PaymentProof(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String(20), default="pending")
-    payment_method = db.Column(db.String(50))
-    proof_url = db.Column(db.String(500))
-    sender_name = db.Column(db.String(100))
-    admin_notes = db.Column(db.Text)
+    user_name = db.Column(db.String(100), nullable=False)
+    user_email = db.Column(db.String(120), nullable=False)
+    user_phone = db.Column(db.String(20), nullable=False)
+    payment_method = db.Column(db.String(50), nullable=False)
+    payment_amount = db.Column(db.Integer, nullable=False)
+    proof_image = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(20), default='pending')
+    access_code = db.Column(db.String(10), unique=True)
+    device_id = db.Column(db.String(200))
+    expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=get_indonesia_time)
-    updated_at = db.Column(db.DateTime, default=get_indonesia_time, onupdate=get_indonesia_time)
-    
-    # Relationship sudah otomatis ada dari backref di User
-    # user = db.relationship('User', backref='payments')
+    approved_at = db.Column(db.DateTime)
 
-class Access(db.Model):
+class AccessCode(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    video_id = db.Column(db.Integer, db.ForeignKey('video.id'), nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False, default=lambda: get_indonesia_time() + timedelta(hours=48))
+    code = db.Column(db.String(10), unique=True, nullable=False)
+    is_used = db.Column(db.Boolean, default=False)
+    device_id = db.Column(db.String(200))
+    expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=get_indonesia_time)
-    
-    # Relationships sudah otomatis ada dari backref di User dan Video
-
-class Announcement(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    text_color = db.Column(db.String(20), default="#ffffff")
-    text_style = db.Column(db.String(50), default="normal")
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=get_indonesia_time)
-    updated_at = db.Column(db.DateTime, default=get_indonesia_time, onupdate=get_indonesia_time)
+    used_at = db.Column(db.DateTime)
+    is_active = db.Column(db.Boolean, default=True)  # Tambahan baru untuk nonaktifkan
+    notes = db.Column(db.String(200))  # Tambahan baru untuk catatan
